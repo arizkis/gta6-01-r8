@@ -42,7 +42,8 @@ export function createPedestrians(scene, city, seed = 17) {
     root.position.set(x, city.surfaceHeight(x, z), z); scene.add(root);
     const state = { mode: 'stroll', panic: 0, sheltering: false, speed: rng.range(2, 3.7) };
     const p = { root, x, z, homeX: x, strollZ: z, minZ, maxZ, direction: i % 2 ? 1 : -1, hasUmbrella, state, phase: rng.range(0, 6), shelter: null };
-    if (i % 8 === 0) {
+    // Umbrella carriers stay on their sidewalk route instead of relocating to shelter.
+    if (i % 8 === 0 && !hasUmbrella) {
       const shelter = city.shelters[i % city.shelters.length];
       p.shelter = { x: shelter.x + shelter.w * .2, z: shelter.z + shelter.d / 2 - 2 };
       if (!city.collides(p.shelter.x, p.shelter.z, 1.5)) { p.x = p.shelter.x; p.z = p.shelter.z; }

@@ -1,5 +1,29 @@
 # HIGH WATER foundation verification
 
+## Verification pass after turn 1
+
+Re-ran the requested checks through Playwright MCP in Chrome at 1024 × 768. Found two umbrella carriers stranded outside their sidewalk route bounds: they had been assigned shelter positions even though they did not shelter. The small `pedestrians.js` fix assigns shelters only to pedestrians without umbrellas. After reloading, both previously stationary figures moved within their routes; all 14 umbrella carriers moved, 38 people strolled and two sheltered. No sampled pedestrian intersected a blocker.
+
+| Requested check | Result |
+| --- | --- |
+| Page and network | PASS: 18 requests per load, all local HTTP 200; no external requests. |
+| Console | PASS: zero errors across both loads. First load emitted four SwiftShader performance warnings; fixed reload emitted none. |
+| Title, walk, sprint | PASS: START entered play; measured 7 and 11 units/second. |
+| District and surge | PASS: walked from Citrus Commons into Old Salt Quarter; HUD changed; countdown advanced from 12:00 to 11:46. |
+| Flood gauge | PASS: 16 cm on foot; also 16 cm while driving through the Strand flood zone. |
+| Vehicle and camera | PASS: E entered Citrus Comet; card showed its name, 79 km/h and 100% condition; camera followed and FOV rose from 65 to 68.296 degrees. E exited to a free spot and hid the vehicle card. |
+| Pause and board | PASS: pause opened and stopped the timer; board opened with six jobs, first unlocked and the other five disabled; back and resume worked. |
+| Traffic | PASS: all twelve cars moved with headlights, none inside building rectangles. |
+| Pedestrians | PASS after the shelter fix: 40 people, 38 moving, 14 moving umbrellas, two sheltering, zero blocker intersections. |
+| COLDFIN | PASS: van visible at (980,1770) in the fenced impound; prompt read Enter COLDFIN FREEZER VAN. |
+| Repository requirements | PASS: kit vendor bytes equal starter a33ade4; authored root entrypoint comment present; exact wallet JSON; three r8 badges, referral 8kbmacyg, no README template placeholder; all four shot-name/query pairs exact. |
+
+The four weather presets and stepped surge depths were also checked again, including dry ramps at early levels and causewayOpen=false at zero. Final authored game source totals 83,571 bytes excluding Three.js. No screenshots, gameplay systems, submissions or recorder actions were added.
+
+After the fix, two consecutive `MAKEFUN_OUTPUT_DIR=out node main.ts` runs exited 0 and produced identical SHA-256 manifests for all 22 files. Final dossier SHA-256: `9d412ed65ba2f2c9536660753f939d935ff330a0e587cfa3a9f7067005c0c556`.
+
+## Initial turn 1 record (5c7b1ea)
+
 Verified locally through the configured Playwright MCP server in real Headless Chrome 157. Initial viewport: 1280 × 800; subsequent movement, HUD and driving checks: 1024 × 768. No screenshots were captured. Distant test locations were reached by positioning the exposed diagnostic state; movement across district and flood boundaries, entry, driving, braking, exit, and menus used browser keyboard or mouse input.
 
 | Check | Observed result |
