@@ -1,0 +1,9 @@
+{
+  "name": "high-water-sunspur",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "node serve.ts",
+    "package": "MAKEFUN_OUTPUT_DIR=out node main.ts"
+  }
+}

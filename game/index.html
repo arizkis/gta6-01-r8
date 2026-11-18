@@ -1,19 +1,37 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
-<style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#142b34">
+  <title>HIGH WATER — a Sunspur surge run</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
-<script type="module" src="./src/main.js"></script>
+  <canvas id="world" aria-label="Sunspur Bay three dimensional game world"></canvas>
+  <div id="flash" aria-hidden="true"></div>
+  <div id="world-labels" aria-hidden="true"></div>
+  <main id="hud" hidden>
+    <section class="panel brand"><span class="eyebrow">SUNSPUR BAY / JUNO REED</span><h1>HIGH WATER<span class="brand-line"></span></h1><div id="district">CITRUS COMMONS</div></section>
+    <section class="panel mission"><div class="eyebrow" id="mission-stage">FREE ROAM</div><h2 id="mission-name">NO ACTIVE JOB</h2><p><span class="accent">NEXT / </span><span id="mission-next"></span></p></section>
+    <section class="panel wanted"><div class="wanted-heading"><span class="eyebrow">SUNSPUR POLICE</span><span id="wanted-label">UNFLAGGED</span></div><div id="stars" aria-label="Wanted level zero"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div><div class="evidence"><span>EVIDENCE</span><b data-evidence="plate">PLATE</b><b data-evidence="face">FACE</b><b data-evidence="outfit">OUTFIT</b></div><div id="dispatch">DISPATCH / NO ACTIVE BULLETIN</div><div class="money"><span>CASH <b id="cash">$140</b></span><span>BANKED <b id="banked">$0</b></span><time id="clock">18:24</time></div><div id="surge-chip">SURGE <b id="surge-time">12:00</b><span>CAUSEWAY CLOSES</span></div></section>
+    <section class="panel police"><div class="eyebrow">POLICE RESPONSE <span id="unit-count">00 UNITS</span></div><div id="police-units"><p class="muted">NO UNITS ASSIGNED</p></div></section>
+    <section class="map-wrap"><div class="map-ring"><canvas id="minimap" width="400" height="400" aria-label="Local streets, flood zones, contacts and route"></canvas><span class="map-north">N</span></div><div class="map-caption" id="map-district">CITRUS COMMONS</div></section>
+    <section class="panel vitals"><div class="eyebrow">JUNO REED</div><div class="meter" data-meter="health"><label>HEALTH <span>100</span></label><i><b></b></i></div><div class="meter" data-meter="armour"><label>ARMOUR <span>0</span></label><i><b></b></i></div><div class="meter" data-meter="nerve"><label>NERVE <span>18</span></label><i><b></b></i></div><div class="respect-title">FACTION RESPECT</div><div class="respect" data-faction="FIXER"><label>FIXER <span>TAVI</span></label><i><b></b></i></div><div class="respect" data-faction="MECHANIC"><label>MECHANIC <span>NIKO</span></label><i><b></b></i></div><div class="respect" data-faction="FENCE"><label>FENCE <span>PAZ</span></label><i><b></b></i></div></section>
+    <section class="telemetry"><div class="panel cooler" id="cooler-card" hidden><div class="eyebrow">COLD CARGO / LIVE TELEMETRY</div><div class="cooler-grid"><span>COOLER<b id="cooler-temp">−4°C</b></span><span>INTEGRITY<b id="cooler-integrity">100%</b></span><span>PAYOUT<b id="cooler-payout">$0</b></span></div></div><div class="panel water" id="water-card" hidden><div class="water-bar"><i id="water-fill"></i></div><div><span class="eyebrow">WATER DEPTH</span><strong><span id="water-depth">0</span><small> CM</small></strong><span class="muted">LOW STREET / FLOOD ZONE</span></div></div><div class="panel vehicle" id="vehicle-card" hidden><div class="eyebrow" id="vehicle-name">CITRUS COMET</div><div class="speed"><strong id="speed">0</strong><span>KM/H</span><span class="condition">CONDITION <b id="condition">100%</b></span></div><div class="radio-line" id="radio-line">RADIO / OFF AIR</div></div></section>
+    <div id="interaction" class="panel" hidden><kbd>E</kbd><span id="interaction-text"></span></div>
+    <section id="dialogue" class="panel" hidden><div id="portrait"></div><div><h3 id="speaker"></h3><p id="dialogue-line"></p></div></section>
+    <aside id="phone" class="panel" hidden><div class="phone-speaker"></div><div id="phone-content"></div></aside>
+    <div id="toast" class="panel" role="status" hidden></div>
+    <footer class="controls"><span><kbd>WASD / ↑↓←→</kbd> drive / walk</span><span><kbd>SHIFT</kbd> sprint</span><span><kbd>E</kbd> enter / talk</span><span><kbd>F</kbd> radio</span><span><kbd>X</kbd> spike strip</span><span><kbd>ESC</kbd> pause</span></footer>
+  </main>
+  <section id="title-menu" class="menu">
+    <div class="title-content"><div class="eyebrow overline">SUNSPUR BAY · THE SURGE IS COMING</div><h2 class="game-title">HIGH<br><span>WATER</span><i>↗</i></h2><p class="subtitle">a Sunspur surge run</p><p class="story">One van. One last crossing.<br>Move the cold cargo before the city goes under.</p><div class="menu-actions"><button id="start-button" class="primary">START <span>↗</span></button><button data-board>JOB BOARD</button></div><div class="menu-controls">ENTER to start · WASD to move · E to enter / talk<br>SHIFT to sprint · ESC to pause</div></div><div class="title-stamp"><b>12:00</b><span>UNTIL THE<br>CAUSEWAY CLOSES</span></div><div class="title-location">17 / SUNSPUR BAY<br><span>A STORM WORTH OUTRUNNING</span></div>
+  </section>
+  <section id="pause-menu" class="menu centered" hidden><div class="menu-box panel"><div class="eyebrow">TAKE A BREATH / THE CLOCK IS STOPPED</div><h2>DAY PAUSED</h2><button id="resume-button" class="primary">RESUME</button><button id="restart-button">RESTART DAY</button><button data-board>JOB BOARD</button></div></section>
+  <section id="board-menu" class="menu board-menu" hidden><div class="board panel"><header><div><div class="eyebrow">SIX JOBS / ONE NIGHT / SUNSPUR BAY</div><h2>THE JOB BOARD</h2></div><button id="board-back">BACK <span>ESC</span></button></header><div id="jobs"></div><footer>Build trust. Keep the cargo cold. Beat the water.</footer></div></section>
+  <div id="boot-error" class="panel" hidden></div>
+  <script type="module" src="src/main.js"></script>
 </body>
 </html>

@@ -1,134 +1,129 @@
-// Boot and the one loop: input is read every frame, the world advances in fixed 1/60 s steps
-// (several in a slow frame, none in a fast one), and the renderer paints what is there. The game
-// moves between four screens: title, play, paused and game over.
-//
-// ?seed=N fixes the falling pattern. ?shot=start|play|end (with &seed=N) stages that scene
-// instead of running the loop, paints it twice and sets window.__shotReady for a screenshot.
-import { BEST_KEY, LIVES, STEP } from './config.js';
-import { createRandom } from './random.js';
-import { createWorld, EVENT_HIT, EVENT_OVER } from './world.js';
-import { ACTION_CONFIRM, ACTION_PAUSE, createInput } from './input.js';
-import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
-import { stageShot } from './shots.js';
+// HIGH WATER foundation: seeded city, weather, surge, vehicles, traffic,
+// pedestrians, walking, driving, cameras, HUD, minimap, menus and job definitions.
+import * as THREE from '../vendor/three.min.js';
+import { createCity } from './city.js';
+import { createWeather } from './weather.js';
+import { createSurge } from './surge.js';
+import { createParkedVehicles, vehicleBlocker } from './vehicles.js';
+import { createTraffic } from './traffic.js';
+import { createPedestrians } from './pedestrians.js';
+import { createPlayer } from './player.js';
+import { updateDriving } from './driving.js';
+import { createCamera } from './camera.js';
+import { createMinimap } from './minimap.js';
+import { createHUD } from './hud.js';
+import { createMissionDirector } from './mission-director.js';
+export const scope = 'Boot, shared system state, input, menus and the foundation frame loop.';
 
-/** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped, not replayed. */
-const MAX_FRAME = 0.25;
-
-const params = new URLSearchParams(window.location.search);
-const shot = params.get('shot');
-const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
-const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() * 4294967296);
-
-const canvas = document.getElementById('game');
-const status = document.getElementById('status');
-const world = createWorld(createRandom(seed));
-const renderer = createRenderer(canvas);
-
-function readBest() {
-  try {
-    return Number.parseInt(window.localStorage.getItem(BEST_KEY) ?? '0', 10) || 0;
-  } catch {
-    return 0;
+function boot() {
+  const query = new URLSearchParams(location.search), seed = Number(query.get('seed') || 17);
+  const canvas = document.getElementById('world');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
+  renderer.setSize(innerWidth, innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.12;
+  const scene = new THREE.Scene(), city = createCity(scene, Number.isFinite(seed) ? seed : 17);
+  const weather = createWeather(scene, city, seed), surge = createSurge(city);
+  const parked = createParkedVehicles(scene, seed), traffic = createTraffic(scene, city, seed);
+  const crowd = createPedestrians(scene, city, seed), player = createPlayer(scene, city), follow = createCamera(innerWidth, innerHeight, city);
+  const minimap = createMinimap(document.getElementById('minimap'), city), hud = createHUD(crowd.contacts), missions = createMissionDirector();
+  const state = {
+    mode: 'title', wanted: { level: 0, evidence: { plate: false, face: false, outfit: false }, dispatch: '' },
+    units: [], economy: { cash: 140, banked: 0 }, cooler: { active: false, temperature: -4, integrity: 100, payout: 0 },
+    radio: { station: '' }, dialogue: { active: false, speaker: '', line: '' }, phone: { open: false }, elapsed: 0,
+  };
+  const input = new Set(), systems = new Set();
+  let boardReturn = 'title', prompt = null, lastFrame = performance.now(), lastHUD = 0;
+  const cars = () => parked.concat(traffic.cars);
+  function setMode(mode) {
+    state.mode = mode; input.clear();
+    document.getElementById('title-menu').hidden = mode !== 'title';
+    document.getElementById('pause-menu').hidden = mode !== 'paused';
+    document.getElementById('board-menu').hidden = mode !== 'board';
+    hud.show(mode === 'playing' || mode === 'paused');
   }
-}
-
-function saveBest(value) {
-  try {
-    window.localStorage.setItem(BEST_KEY, String(value));
-  } catch {
-    // Storage can be off (private windows): the best score then lasts this visit only.
+  function start() { setMode('playing'); canvas.focus(); }
+  function openBoard() {
+    boardReturn = state.mode === 'title' ? 'title' : 'paused';
+    missions.renderBoard(document.getElementById('jobs'), () => { start(); }); setMode('board');
   }
-}
-
-function runShot(name) {
-  const scene = stageShot(name, world);
-  let painted = 0;
-  function paint() {
-    renderer.draw(world.state, scene.screen, scene.best);
-    painted += 1;
-    if (painted < 2) requestAnimationFrame(paint);
-    else window.__shotReady = true;
-  }
-  requestAnimationFrame(paint);
-}
-
-function runGame() {
-  const input = createInput(canvas);
-  let screen = SCREEN_TITLE;
-  let best = readBest();
-  let accumulator = 0;
-  let last = performance.now();
-
-  // Screen readers (and anyone watching the page's text) hear the screen changes and each hit.
-  function announce(message) {
-    status.textContent = message;
-  }
-
-  function startGame() {
-    world.reset();
-    accumulator = 0;
-    screen = SCREEN_PLAY;
-    announce(`Playing. ${LIVES} lives.`);
-  }
-
-  function endGame() {
-    screen = SCREEN_OVER;
-    if (world.state.score > best) {
-      best = world.state.score;
-      saveBest(best);
-    }
-    announce(`Game over. Score ${world.state.score}. Best ${best}.`);
-  }
-
-  function handleActions() {
-    const actions = input.takeActions();
-    if (actions & ACTION_CONFIRM && (screen === SCREEN_TITLE || screen === SCREEN_OVER)) startGame();
-    else if (actions & ACTION_PAUSE && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
-    } else if (actions & (ACTION_PAUSE | ACTION_CONFIRM) && screen === SCREEN_PAUSED) {
-      screen = SCREEN_PLAY;
-      announce('Playing.');
+  function closeBoard() { setMode(boardReturn); }
+  function interact() {
+    prompt = player.interaction(parked, crowd.contacts);
+    if (!prompt) return;
+    if (prompt.type === 'enter') { player.enter(prompt.target); follow.reset(); }
+    if (prompt.type === 'exit' && !player.exit(cars())) hud.notify('Slow down and leave room beside the vehicle.');
+    if (prompt.type === 'talk') {
+      systems.forEach(system => system.interact?.(prompt));
+      window.dispatchEvent(new CustomEvent('highwater:talk', { detail: { id: prompt.target.id } }));
     }
   }
-
-  function step() {
-    if (screen === SCREEN_TITLE) {
-      world.step(STEP, 0, true);
-      return;
+  document.getElementById('start-button').onclick = start;
+  document.getElementById('resume-button').onclick = start;
+  document.getElementById('restart-button').onclick = () => location.reload();
+  document.querySelectorAll('[data-board]').forEach(button => { button.onclick = openBoard; });
+  document.getElementById('board-back').onclick = closeBoard;
+  addEventListener('keydown', event => {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab'].includes(event.code)) event.preventDefault();
+    if (!event.repeat) {
+      if (event.code === 'Enter' && state.mode === 'title') start();
+      else if (event.code === 'Escape' || event.code === 'KeyP') {
+        if (state.mode === 'board') closeBoard(); else if (state.mode === 'playing') setMode('paused'); else if (state.mode === 'paused') start();
+      } else if (event.code === 'KeyB' && (state.mode === 'playing' || state.mode === 'paused')) openBoard();
+      else if (event.code === 'KeyE' && state.mode === 'playing') interact();
+      systems.forEach(system => system.keydown?.(event, state.mode));
     }
-    const events = world.step(STEP, input.direction(), false);
-    if (events & EVENT_OVER) endGame();
-    else if (events & EVENT_HIT) announce(world.state.lives === 1 ? 'Hit. 1 life left.' : `Hit. ${world.state.lives} lives left.`);
-  }
-
+    if (state.mode === 'playing') input.add(event.code);
+  });
+  addEventListener('keyup', event => input.delete(event.code));
+  addEventListener('blur', () => { if (state.mode === 'playing') setMode('paused'); });
+  addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); follow.resize(innerWidth, innerHeight); });
+  const game = { scene, renderer, city, weather, surge, parked, traffic, crowd, player, camera: follow, minimap, hud, missions, state, input,
+    start, setMode, openBoard, systems, cars,
+    snapshot() {
+      const actor = player.position();
+      return { mode: state.mode, district: city.districtAt(actor.x, actor.z), position: { x: actor.x, z: actor.z },
+        driving: player.state.vehicle?.name || null, speed: player.state.vehicle?.speed || 0, surge: { ...surge.state },
+        waterDepth: surge.depthAt(actor.x, actor.z), prompt: prompt?.text || '', traffic: traffic.cars.length, pedestrians: crowd.people.length };
+    } };
+  window.highWater = game;
+  follow.update(1, player.state, false);
   function frame(now) {
     requestAnimationFrame(frame);
-    accumulator += Math.min((now - last) / 1000, MAX_FRAME);
-    last = now;
-    handleActions();
-    if (screen === SCREEN_TITLE || screen === SCREEN_PLAY) {
-      while (accumulator >= STEP && (screen === SCREEN_TITLE || screen === SCREEN_PLAY)) {
-        step();
-        accumulator -= STEP;
+    const dt = Math.min(1, (now - lastFrame) / 1000); lastFrame = now;
+    const playing = state.mode === 'playing', ambient = state.mode === 'title';
+    if (playing || ambient) {
+      weather.update(dt, player.position());
+      const steps = Math.max(1, Math.ceil(dt / .04)), step = dt / steps;
+      for (let i = 0; i < steps; i++) {
+        traffic.update(step, weather.state, player.state.vehicle); crowd.update(step, weather.state);
+        if (playing) {
+          if (player.state.vehicle) {
+            const obstacles = cars().filter(car => car !== player.state.vehicle).map(vehicleBlocker);
+            updateDriving(player.state.vehicle, input, step, city, obstacles);
+          }
+          player.update(step, input, cars());
+        }
       }
-    } else {
-      accumulator = 0;
+      parked.forEach(car => car.setHeadlights(weather.state.lamps || weather.state.rain));
     }
-    renderer.draw(world.state, screen, best);
+    if (playing) {
+      state.elapsed += dt;
+      systems.forEach(system => system.update?.(dt, game));
+      prompt = player.interaction(parked, crowd.contacts);
+    }
+    surge.update(dt, playing);
+    const actor = player.position(); follow.update(dt, actor, Boolean(player.state.vehicle));
+    if (now - lastHUD > 60) {
+      hud.update((now - lastHUD) / 1000, { player: player.state, actor, mission: missions.state, wanted: state.wanted, units: state.units,
+        economy: state.economy, cooler: state.cooler, weather: weather.state, surge, district: city.districtAt(actor.x, actor.z), prompt, radio: state.radio }, follow.camera);
+      minimap.draw(actor, surge); lastHUD = now;
+    }
+    renderer.render(scene, follow.camera);
   }
-
-  // Leaving the tab pauses a running game rather than letting blocks fall unseen.
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
-    }
-  });
-
-  announce('Block Dodger. Press Space or click to start.');
-  requestAnimationFrame(frame);
+  setMode('title'); requestAnimationFrame(frame);
 }
-
-if (shot) runShot(shot);
-else runGame();
+try { boot(); } catch (error) {
+  const panel = document.getElementById('boot-error'); panel.hidden = false;
+  panel.textContent = `Sunspur could not start: ${error.message}. This game needs a desktop browser with WebGL enabled.`;
+  throw error;
+}
